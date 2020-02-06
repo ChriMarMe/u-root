@@ -26,6 +26,23 @@ RUN sudo apt-get update &&                          \
         `# Multiboot kernel build deps`             \
         gcc-multilib                                \
         gzip &&                                     \
+        `# libtpms & swtpm dependencies`            \
+        dh-exec	                            		\
+        gawk     			                        \
+	    libfuse-dev 		                        \
+	    libglib2.0-dev 		                        \
+	    libgmp-dev 		                            \
+	    expect 			                            \
+	    libtasn1-dev 	                        	\
+	    socat 			                            \
+	    tpm-tools 		                            \
+        gnutls-dev                          		\
+	    gnutls-bin 		                            \	
+	    net-tools 		                            \
+	    libseccomp-dev		                        \
+        trousers                                    \
+        libtool 		                            \
+	    libssl-dev		                            \                                
     sudo rm -rf /var/lib/apt/lists/*
 
 # Create working directory
@@ -73,7 +90,35 @@ RUN set -eux;                                                          \
     gzip -k kernel;                                                    \
     rm -rf multiboot-test-kernel/
 
+# Build libtpms & swtpm
+RUN set -eux;                                                          \
+    git clone --depth=1 --branch=v0.7.0                                \
+        https://github.com/stefanberger/libtpms;                       \
+    cd libtpms;                                                        \
+    ./autogen.sh --with-tpm2 --with-openssl;                           \
+    make                                                               \
+    make install;                                                      \
+    cd ~;                                                              \             
+    rm -rf libtpms/;                                                   \
+    git clone --depth=1 --branch=v0.2.0                                \
+        https://github.com/stefanberger/swtpm;                         \
+    cd swtpm;                                                          \
+    make -j$(($(nproc) * 2 + 1));                                      \
+    make install;                                                      \
+    mkdir /tmp/tpm1
+    mkdir /tmp/tpm2                                                    \
+    cd ~;                                                              \
+    rm -rf swtpm/
+
+RUN ldconfig;                                                          \
+     swtpm_setup --tpmstate /tmp/tpm1/ --create-ek-cert;               \               
+     swtpm_setup --tpm2 --tpmstate /tmp/tpm2/ --create-ek-cert
+
+RUN swtpm socket --tpmstate dir=/tmp/tpm1 --ctrl type=unixio,path=/tmp/tpm1/swtpm-sock; \
+    swtpm socket --tpmstate dir=/tmp/tpm2 --tpm2 --ctrl type=unixio,path=/tmp/tpm2/swtpm-sock
+
 # Export paths to binaries.
 ENV UROOT_KERNEL /home/circleci/bzImage
 ENV UROOT_QEMU "/home/circleci/qemu-system-x86_64 -L /home/circleci/pc-bios -m 1G"
 ENV UROOT_TESTARCH amd64
+#ENV UROOT_SWTPM "not sure about the path usually its in /usr/bin/swtpm"
