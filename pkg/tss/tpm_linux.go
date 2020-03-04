@@ -2,11 +2,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package tss provides TPM 1.2/2.0 core functionality and
-// abstraction layer for high-level functions
 package tss
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -23,12 +22,11 @@ const (
 
 func probeSystemTPMs() ([]probedTPM, error) {
 	var tpms []probedTPM
+	var tpmDevs []os.FileInfo
 
 	tpmDevs, err := ioutil.ReadDir(tpmRoot)
-	if os.IsNotExist(err) {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
+	if err != nil {
+		return nil, fmt.Errorf("no tpm")
 	}
 
 	// TPM look up is hardcoded. Taken from googles go-attestation.
@@ -95,4 +93,10 @@ func newTPM(pTPM probedTPM) (*TPM, error) {
 		SysPath: pTPM.Path,
 		RWC:     rwc,
 	}, nil
+}
+
+// MeasurementLog reads the TCPA eventlog in binary format
+// from the Linux kernel
+func (t *TPM) MeasurementLog() ([]byte, error) {
+	return ioutil.ReadFile("/sys/kernel/security/tpm0/binary_bios_measurements")
 }
